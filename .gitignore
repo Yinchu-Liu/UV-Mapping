@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+<<<<<<< HEAD
+=======
+
+# Build directory
+/build/
+.vs/
+*.opendb
+*.db
+>>>>>>> d549d0f (Initial commit)
