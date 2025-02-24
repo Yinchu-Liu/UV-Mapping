@@ -5,6 +5,7 @@
 #include <iostream>
 
 int main() {
+    // Exception handling
     try {
         Renderer renderer(800, 600);
         if (!renderer.init()) {

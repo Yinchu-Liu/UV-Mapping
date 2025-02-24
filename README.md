@@ -1,5 +1,11 @@
 # UV Mapping Project
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![C++](https://img.shields.io/badge/C++-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
+[![OpenGL](https://img.shields.io/badge/OpenGL-3.3-red.svg)](https://www.opengl.org/)
+[![GLFW](https://img.shields.io/badge/GLFW-3.3.8-green.svg)](https://www.glfw.org/)
+[![GLM](https://img.shields.io/badge/GLM-0.9.9.8-blue.svg)](https://github.com/g-truc/glm)
+
 This project demonstrates UV mapping in OpenGL using C++. It provides a simple framework for loading 3D models, applying textures, and rendering them with basic lighting.
 
 ## Features
@@ -14,23 +20,26 @@ This project demonstrates UV mapping in OpenGL using C++. It provides a simple f
 ## Project Structure
 
 ```
-UVMappingProject/
-│── src/
-│   ├── main.cpp           # Application entry point
-│   ├── Renderer.cpp       # OpenGL rendering setup and main loop
-│   ├── Renderer.h
-│   ├── Mesh.cpp          # 3D model loading and rendering
-│   ├── Mesh.h
-│   ├── Texture.cpp       # Texture loading and management
-│   ├── Texture.h
-│   ├── Shader.cpp        # GLSL shader program management
-│   ├── Shader.h
-│── shaders/
-│   ├── vertex_shader.glsl   # Vertex shader
-│   ├── fragment_shader.glsl # Fragment shader
-│── assets/
-│   ├── models/           # 3D model files
-│   ├── textures/         # Texture files
+UVMapping/
+├── assets/              # Asset files (models, textures)
+├── build/              # Build output directory
+├── include/            # Header files
+│   ├── Mesh.h         # Mesh handling
+│   ├── Renderer.h     # Rendering system
+│   ├── Shader.h       # Shader management
+│   └── Texture.h      # Texture handling
+├── shaders/           # GLSL shader files
+│   ├── vertex_shader.glsl
+│   └── fragment_shader.glsl
+├── src/               # Source files
+│   ├── Mesh.cpp
+│   ├── Renderer.cpp
+│   ├── Shader.cpp
+│   └── Texture.cpp
+├── main.cpp           # Application entry point
+├── CMakeLists.txt    # CMake build configuration
+├── LICENSE           # MIT License
+└── README.md         # This file
 ```
 
 ## Dependencies
