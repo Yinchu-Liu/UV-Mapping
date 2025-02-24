@@ -12,16 +12,17 @@ Mesh::~Mesh() {
 }
 
 bool Mesh::loadFromFile(const std::string& filename) {
-    std::vector<glm::vec3> temp_vertices;
-    std::vector<glm::vec2> temp_uvs;
-    std::vector<glm::vec3> temp_normals;
-    std::vector<unsigned int> vertexIndices, uvIndices, normalIndices;
 
     std::ifstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Error: Could not open file " << filename << std::endl;
         return false;
     }
+
+    std::vector<glm::vec3> temp_vertices;
+    std::vector<glm::vec2> temp_uvs;
+    std::vector<glm::vec3> temp_normals;
+    std::vector<unsigned int> vertexIndices, uvIndices, normalIndices;
 
     std::cout << "Loading mesh from file: " << filename << std::endl;
 

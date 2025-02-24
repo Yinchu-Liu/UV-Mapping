@@ -1,8 +1,15 @@
+/**
+ * @file Texture.cpp
+ * @brief Implementation of the Texture class for OpenGL texture management
+ */
 #include "Texture.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <iostream>
 
+/**
+ * @brief Constructs a new Texture object and generates an OpenGL texture ID
+ */
 Texture::Texture() : textureID(0), width(0), height(0), channels(0) {
     // Generate texture ID immediately
     glGenTextures(1, &textureID);
@@ -11,10 +18,18 @@ Texture::Texture() : textureID(0), width(0), height(0), channels(0) {
     }
 }
 
+/**
+ * @brief Destroys the Texture object and releases OpenGL resources
+ */
 Texture::~Texture() {
     cleanup();
 }
 
+/**
+ * @brief Loads texture data from a file and uploads it to the GPU
+ * @param filename Path to the texture file to load
+ * @return true if the texture loaded successfully, false otherwise
+ */
 bool Texture::loadFromFile(const std::string& filename) {
     if (textureID == 0) {
         std::cerr << "Invalid texture ID" << std::endl;
@@ -87,6 +102,10 @@ bool Texture::loadFromFile(const std::string& filename) {
     }
 }
 
+/**
+ * @brief Binds the texture to a specific texture unit
+ * @param slot Texture unit to bind to (defaults to 0)
+ */
 void Texture::bind(unsigned int slot) const {
     if (textureID == 0) {
         std::cerr << "Attempting to bind invalid texture" << std::endl;
@@ -96,10 +115,16 @@ void Texture::bind(unsigned int slot) const {
     glBindTexture(GL_TEXTURE_2D, textureID);
 }
 
+/**
+ * @brief Unbinds the texture from the current texture unit
+ */
 void Texture::unbind() const {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+/**
+ * @brief Releases OpenGL resources associated with the texture
+ */
 void Texture::cleanup() {
     if (textureID) {
         glDeleteTextures(1, &textureID);

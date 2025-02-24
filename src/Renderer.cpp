@@ -9,17 +9,20 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <chrono>
+#include <thread>
 
 Renderer::Renderer(int width, int height)
     : window(nullptr)
     , windowWidth(width)
     , windowHeight(height)
     , cameraDistance(5.0f)
-    , cameraPitch(30.0f)
-    , cameraYaw(45.0f)
+    , cameraRotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
     , cameraTarget(0.0f)
     , lightPos(2.0f, 2.0f, 2.0f)
-    , modelRotation(0.0f)
+    , modelRotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
     , autoRotate(true)
     , rotationSpeed(0.5f)
     , showUI(true)
@@ -33,6 +36,7 @@ Renderer::~Renderer() {
 bool Renderer::init() {
     std::cout << "Initializing renderer..." << std::endl;
 
+    // Initialize the GLFW library
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return false;
@@ -40,12 +44,14 @@ bool Renderer::init() {
 
     std::cout << "Initializing GLFW..." << std::endl;
 
+    // Set OpenGL version to 3.3 and Core Profile (deprecated features are not available)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     std::cout << "Creating window..." << std::endl;
 
+    // Create the GLFW window with the specified width, height, and title ("UV Mapping")
     window = glfwCreateWindow(windowWidth, windowHeight, "UV Mapping", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
@@ -53,13 +59,16 @@ bool Renderer::init() {
         return false;
     }
 
+    // This makes the created window the current context for OpenGL operations
+    // All OpenGL calls will target this window
     glfwMakeContextCurrent(window);
 
-    // Store the renderer instance in GLFW window
+    // Store the renderer instance ("this" pointer) in GLFW window, allowing thw window to access the renderer instance later
     glfwSetWindowUserPointer(window, this);
 
     std::cout << "Initializing GLAD..." << std::endl;
 
+    // Initialize GLAD, passing the function pointer retrieval mechanism (glfwGetProcAddress)
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return false;
@@ -73,17 +82,19 @@ bool Renderer::init() {
     // Initialize ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui_ImplGlfw_InitForOpenGL(window, true); // Initialize ImGui for use with GLFW and OpenGL
+    ImGui_ImplOpenGL3_Init("#version 330"); // Initialize ImGui for OpenGL 3.x with GLSL version 330
     ImGui::StyleColorsDark();
 
-    // Enable depth testing
+    // Enable depth testing, determining which objects are in front and which are behind
     glEnable(GL_DEPTH_TEST);
+    // Set the viewport to the size of the window, so OpenGL knows where to render the scene within the window
     glViewport(0, 0, windowWidth, windowHeight);
 
-    // Set the viewport resize callback
+    // Set the viewport resize callback, when the user resizes the window
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
+    // The buffer swap (to show the rendered image) will occur once per vertical refresh
     glfwSwapInterval(1);
 
     std::cout << "Renderer initialized successfully" << std::endl;
@@ -91,12 +102,8 @@ bool Renderer::init() {
 }
 
 void Renderer::updateCamera() {
-    // Convert spherical coordinates to Cartesian
-    float x = cameraDistance * cos(glm::radians(cameraPitch)) * cos(glm::radians(cameraYaw));
-    float y = cameraDistance * sin(glm::radians(cameraPitch));
-    float z = cameraDistance * cos(glm::radians(cameraPitch)) * sin(glm::radians(cameraYaw));
-    
-    cameraPos = glm::vec3(x, y, z);
+    glm::vec3 direction = cameraRotation * glm::vec3(0.0f, 0.0f, -1.0f);
+    cameraPos = cameraTarget - direction * cameraDistance;
 }
 
 void Renderer::renderUI() {
@@ -109,15 +116,25 @@ void Renderer::renderUI() {
         
         if (ImGui::CollapsingHeader("Camera Controls")) {
             ImGui::SliderFloat("Distance", &cameraDistance, 2.0f, 10.0f);
-            ImGui::SliderFloat("Pitch", &cameraPitch, -89.0f, 89.0f);
-            ImGui::SliderFloat("Yaw", &cameraYaw, 0.0f, 360.0f);
+            if (ImGui::SliderFloat3("Rotation", glm::value_ptr(cameraRotation), -1.0f, 1.0f)) {
+                cameraRotation = glm::normalize(cameraRotation);
+            }
         }
 
         if (ImGui::CollapsingHeader("Model Controls")) {
             ImGui::Checkbox("Auto Rotate", &autoRotate);
             ImGui::SliderFloat("Rotation Speed", &rotationSpeed, 0.1f, 2.0f);
             if (!autoRotate) {
-                ImGui::SliderFloat3("Rotation", glm::value_ptr(modelRotation), 0.0f, 360.0f);
+                float eulerAngles[3];
+                glm::vec3 rotation = glm::eulerAngles(modelRotation);
+                eulerAngles[0] = glm::degrees(rotation.x);
+                eulerAngles[1] = glm::degrees(rotation.y);
+                eulerAngles[2] = glm::degrees(rotation.z);
+                
+                if (ImGui::SliderFloat3("Rotation", eulerAngles, -180.0f, 180.0f)) {
+                    glm::vec3 newRotation = glm::radians(glm::vec3(eulerAngles[0], eulerAngles[1], eulerAngles[2]));
+                    modelRotation = glm::quat(newRotation);
+                }
             }
         }
 
@@ -142,59 +159,61 @@ void Renderer::processInput() {
 }
 
 void Renderer::render(const Mesh& mesh, const Shader& shader, const Texture& texture) {
+    // Calculate the delta time (deltaTime), which is the time difference between the current frame and the last frame
+    // This is used for frame rate-independent animations and smooth motion
+    // lastFrameTime is initialized statically so it retains its value across multiple calls to render()
+    static auto lastFrameTime = std::chrono::high_resolution_clock::now();
+    auto currentFrameTime = std::chrono::high_resolution_clock::now();
+    float deltaTime = std::chrono::duration<float>(currentFrameTime - lastFrameTime).count();
+    lastFrameTime = currentFrameTime;
+
+    // Clear the screen with a dark teal color
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    try {
-        shader.use();
-        texture.bind(0);
-        mesh.bind();
+    // Update camera
+    updateCamera();
 
-        // Update camera position
-        updateCamera();
-
-        // Create transformation matrices
-        glm::mat4 model = glm::mat4(1.0f);
-        
-        if (autoRotate) {
-            float angle = rotationSpeed * (float)glfwGetTime();
-            model = glm::rotate(model, angle, glm::vec3(0.5f, 1.0f, 0.0f));
-        } else {
-            model = glm::rotate(model, glm::radians(modelRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-            model = glm::rotate(model, glm::radians(modelRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-            model = glm::rotate(model, glm::radians(modelRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-        }
-
-        glm::mat4 view = glm::lookAt(
-            cameraPos,
-            cameraTarget,
-            glm::vec3(0.0f, 1.0f, 0.0f)
-        );
-
-        glm::mat4 projection = glm::perspective(
-            glm::radians(45.0f),
-            (float)windowWidth / (float)windowHeight,
-            0.1f,
-            100.0f
-        );
-
-        shader.setMat4("model", model);
-        shader.setMat4("view", view);
-        shader.setMat4("projection", projection);
-        shader.setVec3("lightPos", lightPos);
-        shader.setVec3("viewPos", cameraPos);
-
-        glDrawElements(GL_TRIANGLES, mesh.getVertexCount(), GL_UNSIGNED_INT, 0);
-
-        // Render UI
-        renderUI();
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-
-    } catch (const std::exception& e) {
-        std::cerr << "Error during rendering: " << e.what() << std::endl;
+    // Create model matrix
+    glm::mat4 model = glm::mat4(1.0f);
+    if (autoRotate) {
+        float angle = rotationSpeed * deltaTime * 50.0f;
+        modelRotation = glm::normalize(glm::angleAxis(glm::radians(angle), glm::vec3(0.5f, 1.0f, 0.0f)) * modelRotation);
+        model = glm::toMat4(modelRotation);
+    } else {
+        model = glm::toMat4(modelRotation);
     }
+
+    // Create view matrix
+    glm::mat4 view = glm::lookAt(cameraPos, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+
+    // Create projection matrix
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
+
+    // Set shader uniforms
+    shader.use(); // Activate the shader program
+    shader.setMat4("model", model);
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection); // Send model, view, and projection matrices to the shader for transformation
+    shader.setVec3("lightPos", lightPos);
+    shader.setVec3("viewPos", cameraPos); // Send lighting and camera position to shader for lighting calculation
+
+    // Bind texture and draw mesh
+    texture.bind();
+    mesh.bind();
+    glDrawElements(GL_TRIANGLES, mesh.getIndexCount(), GL_UNSIGNED_INT, 0);
+
+    // Render UI
+    if (showUI) {
+        renderUI();
+    }
+
+    // Swap buffers and poll events
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+
+    // Frame rate limiting
+    std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
 }
 
 void Renderer::cleanup() {
@@ -220,5 +239,6 @@ void Renderer::framebufferSizeCallback(GLFWwindow* window, int width, int height
         renderer->windowWidth = width;
         renderer->windowHeight = height;
     }
+    // Ensure that the rendering is correctly mapped to the entire window area due to resizing
     glViewport(0, 0, width, height);
 }

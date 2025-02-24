@@ -123,6 +123,10 @@ source_group(README FILES README.md)
 # ImGui groups
 source_group(src/imgui FILES ${IMGUI_SOURCES})
 
+# Add shaders folder to the project
+file(GLOB SHADER_FILES "shaders/*.glsl")
+source_group("Shaders" FILES ${SHADER_FILES})
+
 # Create executable
 add_executable(${PROJECT_NAME} main.cpp
     ${renderer_HEADERS} ${renderer_SOURCE}
@@ -130,7 +134,8 @@ add_executable(${PROJECT_NAME} main.cpp
     ${texture_HEADERS} ${texture_SOURCE}
     ${shader_HEADERS} ${shader_SOURCE}
     ${IMGUI_SOURCES}
-    README.md 
+    ${SHADER_FILES}
+    README.md
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

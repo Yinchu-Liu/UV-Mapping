@@ -82,16 +82,17 @@ private:
 
     // Camera parameters
     glm::vec3 cameraPos;     ///< Camera position in world space.
+    float cameraDistance;    ///< Distance from camera to target point.
+    glm::quat cameraRotation;///< Camera orientation as a quaternion.
     glm::vec3 cameraTarget;  ///< Point the camera is looking at.
-    float cameraDistance;    ///< Distance of the camera from the target.
     float cameraPitch;       ///< Vertical angle (up/down) of the camera.
     float cameraYaw;         ///< Horizontal angle (left/right) of the camera.
 
     // Light parameters
-    glm::vec3 lightPos; ///< Position of the light source.
+    glm::vec3 lightPos;      ///< Position of the light source.
 
     // Model parameters
-    glm::vec3 modelRotation; ///< Rotation of the 3D model.
+    glm::quat modelRotation; ///< Rotation of the 3D model.
     bool autoRotate;         ///< Flag to enable/disable automatic rotation.
     float rotationSpeed;     ///< Speed of automatic rotation.
 
@@ -110,4 +111,3 @@ private:
 };
 
 #endif // RENDERER_H
-
