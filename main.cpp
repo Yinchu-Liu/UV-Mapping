@@ -15,7 +15,7 @@ int main() {
 
         std::cout << "Loading mesh..." << std::endl;
         Mesh mesh;
-        if (!mesh.loadFromFile("assets/models/cube.obj")) {
+        if (!mesh.loadFromFile("assets/models/sphere.obj")) {
             std::cerr << "Failed to load mesh" << std::endl;
             return -1;
         }
