@@ -18,13 +18,17 @@ Renderer::Renderer(int width, int height)
     : window(nullptr)
     , windowWidth(width)
     , windowHeight(height)
-    , cameraDistance(5.0f)
+    , cameraDistance(15.0f)  // Increased from 5.0f to handle larger models
     , cameraRotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
     , cameraTarget(0.0f)
-    , lightPos(2.0f, 2.0f, 2.0f)
+    , lightPos(5.0f, 5.0f, 5.0f)  // Increased from 2.0f to provide better lighting for larger models
     , modelRotation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
     , autoRotate(true)
     , rotationSpeed(0.5f)
+    , modelScale(0.05f)  // Default scale for the armadillo model
+    , enhanceDetails(true)
+    , detailStrength(0.7f)
+    , rimLightStrength(0.3f)
     , showUI(true)
 {
 }
@@ -93,6 +97,9 @@ bool Renderer::init() {
 
     // Set the viewport resize callback, when the user resizes the window
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+    
+    // Set the scroll callback for zooming
+    glfwSetScrollCallback(window, scrollCallback);
 
     // The buffer swap (to show the rendered image) will occur once per vertical refresh
     glfwSwapInterval(1);
@@ -115,7 +122,7 @@ void Renderer::renderUI() {
         ImGui::Begin("Controls");
         
         if (ImGui::CollapsingHeader("Camera Controls")) {
-            ImGui::SliderFloat("Distance", &cameraDistance, 2.0f, 10.0f);
+            ImGui::SliderFloat("Distance", &cameraDistance, 5.0f, 30.0f);
             if (ImGui::SliderFloat3("Rotation", glm::value_ptr(cameraRotation), -1.0f, 1.0f)) {
                 cameraRotation = glm::normalize(cameraRotation);
             }
@@ -124,6 +131,7 @@ void Renderer::renderUI() {
         if (ImGui::CollapsingHeader("Model Controls")) {
             ImGui::Checkbox("Auto Rotate", &autoRotate);
             ImGui::SliderFloat("Rotation Speed", &rotationSpeed, 0.1f, 2.0f);
+            ImGui::SliderFloat("Model Scale", &modelScale, 0.01f, 1.0f, "%.3f");
             if (!autoRotate) {
                 float eulerAngles[3];
                 glm::vec3 rotation = glm::eulerAngles(modelRotation);
@@ -139,7 +147,13 @@ void Renderer::renderUI() {
         }
 
         if (ImGui::CollapsingHeader("Light Controls")) {
-            ImGui::SliderFloat3("Light Position", glm::value_ptr(lightPos), -5.0f, 5.0f);
+            ImGui::SliderFloat3("Light Position", glm::value_ptr(lightPos), -10.0f, 10.0f);
+        }
+        
+        if (ImGui::CollapsingHeader("Visual Enhancement")) {
+            ImGui::Checkbox("Enhance Details", &enhanceDetails);
+            ImGui::SliderFloat("Detail Strength", &detailStrength, 0.0f, 1.0f);
+            ImGui::SliderFloat("Rim Lighting", &rimLightStrength, 0.0f, 1.0f);
         }
 
         ImGui::End();
@@ -176,19 +190,23 @@ void Renderer::render(const Mesh& mesh, const Shader& shader, const Texture& tex
 
     // Create model matrix
     glm::mat4 model = glm::mat4(1.0f);
+    
+    // Scale down large models to ensure they fit in the view
+    model = glm::scale(model, glm::vec3(modelScale)); // Scale factor can be adjusted
+    
     if (autoRotate) {
         float angle = rotationSpeed * deltaTime * 50.0f;
         modelRotation = glm::normalize(glm::angleAxis(glm::radians(angle), glm::vec3(0.5f, 1.0f, 0.0f)) * modelRotation);
-        model = glm::toMat4(modelRotation);
+        model = glm::toMat4(modelRotation) * model; // Apply rotation after scaling
     } else {
-        model = glm::toMat4(modelRotation);
+        model = glm::toMat4(modelRotation) * model; // Apply rotation after scaling
     }
 
     // Create view matrix
     glm::mat4 view = glm::lookAt(cameraPos, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
 
     // Create projection matrix
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)windowWidth / (float)windowHeight, 0.1f, 1000.0f);
 
     // Set shader uniforms
     shader.use(); // Activate the shader program
@@ -197,10 +215,15 @@ void Renderer::render(const Mesh& mesh, const Shader& shader, const Texture& tex
     shader.setMat4("projection", projection); // Send model, view, and projection matrices to the shader for transformation
     shader.setVec3("lightPos", lightPos);
     shader.setVec3("viewPos", cameraPos); // Send lighting and camera position to shader for lighting calculation
+    
+    // Pass visual enhancement parameters to shader
+    shader.setFloat("detailStrength", enhanceDetails ? detailStrength : 0.0f);
+    shader.setFloat("rimLightStrength", enhanceDetails ? rimLightStrength : 0.0f);
 
     // Bind texture and draw mesh
-    texture.bind();
-    mesh.bind();
+    // Binding doesn't upload data, it selects which already-uploaded data to use
+    texture.bind();    // Make this texture active for rendering, bind to GL_TEXTURE0 (default)
+    mesh.bind();       // Make this mesh's vertex data active
     glDrawElements(GL_TRIANGLES, mesh.getIndexCount(), GL_UNSIGNED_INT, 0);
 
     // Render UI
@@ -241,4 +264,19 @@ void Renderer::framebufferSizeCallback(GLFWwindow* window, int width, int height
     }
     // Ensure that the rendering is correctly mapped to the entire window area due to resizing
     glViewport(0, 0, width, height);
+}
+
+void Renderer::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+    // Get the renderer instance from the window user pointer
+    auto* renderer = static_cast<Renderer*>(glfwGetWindowUserPointer(window));
+    if (renderer) {
+        // Adjust camera distance (zoom) based on scroll direction
+        // Negative yoffset means scroll up (zoom in)
+        // Positive yoffset means scroll down (zoom out)
+        renderer->cameraDistance -= yoffset * 1.0f; // Adjust sensitivity as needed
+        
+        // Clamp camera distance to reasonable values
+        if (renderer->cameraDistance < 3.0f) renderer->cameraDistance = 3.0f;
+        if (renderer->cameraDistance > 40.0f) renderer->cameraDistance = 40.0f;
+    }
 }

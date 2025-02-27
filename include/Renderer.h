@@ -76,6 +76,14 @@ private:
      */
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
+    /**
+     * @brief Callback function for handling mouse scroll events.
+     * @param window Pointer to the GLFW window.
+     * @param xoffset Horizontal scroll offset.
+     * @param yoffset Vertical scroll offset.
+     */
+    static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+
     GLFWwindow* window; ///< Pointer to the GLFW window instance.
     int windowWidth;    ///< Width of the window.
     int windowHeight;   ///< Height of the window.
@@ -95,6 +103,12 @@ private:
     glm::quat modelRotation; ///< Rotation of the 3D model.
     bool autoRotate;         ///< Flag to enable/disable automatic rotation.
     float rotationSpeed;     ///< Speed of automatic rotation.
+    float modelScale;        ///< Scale factor for the model.
+
+    // Visual enhancement parameters
+    bool enhanceDetails;     ///< Toggle detail enhancement
+    float detailStrength;    ///< Strength of detail enhancement
+    float rimLightStrength;  ///< Strength of rim lighting
 
     // UI state
     bool showUI; ///< Flag to toggle UI display.

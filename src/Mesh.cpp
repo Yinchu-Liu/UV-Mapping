@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <limits>
 
 Mesh::Mesh() : VAO(0), VBO(0), EBO(0), vertexCount(0), indexCount(0) {
 }
@@ -105,8 +106,91 @@ bool Mesh::loadFromFile(const std::string& filename) {
     vertexCount = vertices.size();
     indexCount = indices.size();
 
-    std::cout << "Mesh loaded successfully. Vertices: " << vertexCount << ", Indices: " << indexCount << std::endl;
-
+    std::cout << "Successfully loaded " << vertices.size() << " vertices." << std::endl;
+    
+    // Check if UV coordinates are missing or insufficient
+    if (uvs.empty() || uvs.size() != vertices.size()) {
+        std::cout << "UV coordinates missing or incomplete. Generating procedural UVs..." << std::endl;
+        
+        // Clear existing UVs and generate new ones
+        uvs.clear();
+        uvs.resize(vertices.size());
+        
+        // Find the bounding box for the model
+        glm::vec3 minBounds = glm::vec3(std::numeric_limits<float>::max());
+        glm::vec3 maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+        
+        for (const auto& vertex : vertices) {
+            minBounds = glm::min(minBounds, vertex);
+            maxBounds = glm::max(maxBounds, vertex);
+        }
+        
+        glm::vec3 dimensions = maxBounds - minBounds;
+        
+        // Generate UV coordinates based on position
+        for (size_t i = 0; i < vertices.size(); i++) {
+            // Get normalized position from vertex after centering
+            glm::vec3 pos = vertices[i] - minBounds;
+            pos /= dimensions; // Normalize to [0,1] range
+            
+            // Try several UV mapping approaches and choose the best one
+            // Approach 1: Planar mapping using XZ coordinates
+            glm::vec2 planarUV = glm::vec2(pos.x, pos.z);
+            
+            // Approach 2: Spherical mapping
+            glm::vec3 normal = glm::normalize(vertices[i]);
+            float u_spherical = 0.5f + atan2(normal.z, normal.x) / (2.0f * 3.14159f);
+            float v_spherical = 0.5f - asin(normal.y) / 3.14159f;
+            glm::vec2 sphericalUV = glm::vec2(u_spherical, v_spherical);
+            
+            // Approach 3: Cylindrical mapping
+            float theta = atan2(normal.z, normal.x);
+            float u_cylindrical = (theta + 3.14159f) / (2.0f * 3.14159f);
+            float v_cylindrical = (normal.y + 1.0f) * 0.5f;
+            glm::vec2 cylindricalUV = glm::vec2(u_cylindrical, v_cylindrical);
+            
+            // Choose mapping based on the shape:
+            // For the armadillo, cylindrical mapping often works well
+            // Use dot product with up vector to determine if we should use cylindrical vs spherical mapping
+            float upwardness = glm::dot(normal, glm::vec3(0.0f, 1.0f, 0.0f));
+            
+            if (abs(upwardness) > 0.7f) {
+                // For top/bottom parts, use planar mapping
+                uvs[i] = planarUV;
+            } else {
+                // For sides, use cylindrical mapping
+                uvs[i] = cylindricalUV;
+            }
+        }
+        
+        std::cout << "Generated " << uvs.size() << " procedural UV coordinates." << std::endl;
+    } else {
+        std::cout << "Model already has " << uvs.size() << " UV coordinates." << std::endl;
+    }
+    
+    // Find the center of the model and translate vertices to center it
+    glm::vec3 minBounds = glm::vec3(std::numeric_limits<float>::max());
+    glm::vec3 maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+    
+    // Calculate bounding box
+    for (const auto& vertex : vertices) {
+        minBounds = glm::min(minBounds, vertex);
+        maxBounds = glm::max(maxBounds, vertex);
+    }
+    
+    // Calculate center of the model
+    glm::vec3 center = (minBounds + maxBounds) * 0.5f;
+    
+    // Translate all vertices to center the model at origin
+    for (auto& vertex : vertices) {
+        vertex -= center;
+    }
+    
+    std::cout << "Model centered. Bounding box: (" 
+              << minBounds.x << "," << minBounds.y << "," << minBounds.z << ") to ("
+              << maxBounds.x << "," << maxBounds.y << "," << maxBounds.z << ")" << std::endl;
+    
+    // Setup the mesh
     setupMesh();
     return true;
 }
