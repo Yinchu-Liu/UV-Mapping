@@ -4,6 +4,7 @@
 #include <sstream>
 #include <map>
 #include <limits>
+#include <algorithm>
 
 Mesh::Mesh() : VAO(0), VBO(0), EBO(0), vertexCount(0), indexCount(0) {
 }
@@ -126,46 +127,178 @@ bool Mesh::loadFromFile(const std::string& filename) {
         }
         
         glm::vec3 dimensions = maxBounds - minBounds;
+        glm::vec3 center = (minBounds + maxBounds) * 0.5f;
         
-        // Generate UV coordinates based on position
-        for (size_t i = 0; i < vertices.size(); i++) {
-            // Get normalized position from vertex after centering
-            glm::vec3 pos = vertices[i] - minBounds;
-            pos /= dimensions; // Normalize to [0,1] range
+        // Check if this is the armadillo model by looking at the filename
+        bool isArmadillo = filename.find("armadillo") != std::string::npos;
+        
+        if (isArmadillo) {
+            std::cout << "Detected armadillo model. Using advanced segmentation UV mapping..." << std::endl;
             
-            // Try several UV mapping approaches and choose the best one
-            // Approach 1: Planar mapping using XZ coordinates
-            glm::vec2 planarUV = glm::vec2(pos.x, pos.z);
+            // For the armadillo, we'll use a segmentation-based approach
+            // This divides the model into regions and applies different mapping techniques to each
             
-            // Approach 2: Spherical mapping
-            glm::vec3 normal = glm::normalize(vertices[i]);
-            float u_spherical = 0.5f + atan2(normal.z, normal.x) / (2.0f * 3.14159f);
-            float v_spherical = 0.5f - asin(normal.y) / 3.14159f;
-            glm::vec2 sphericalUV = glm::vec2(u_spherical, v_spherical);
+            // 1. First, segment the model into regions based on Y-coordinate (height)
+            const int numSegments = 10;
+            std::vector<std::vector<size_t>> segments(numSegments);
             
-            // Approach 3: Cylindrical mapping
-            float theta = atan2(normal.z, normal.x);
-            float u_cylindrical = (theta + 3.14159f) / (2.0f * 3.14159f);
-            float v_cylindrical = (normal.y + 1.0f) * 0.5f;
-            glm::vec2 cylindricalUV = glm::vec2(u_cylindrical, v_cylindrical);
+            // Assign vertices to segments
+            for (size_t i = 0; i < vertices.size(); i++) {
+                float heightRatio = (vertices[i].y - minBounds.y) / dimensions.y;
+                int segmentIndex = std::min(static_cast<int>(heightRatio * numSegments), numSegments - 1);
+                segments[segmentIndex].push_back(i);
+            }
             
-            // Choose mapping based on the shape:
-            // For the armadillo, cylindrical mapping often works well
-            // Use dot product with up vector to determine if we should use cylindrical vs spherical mapping
-            float upwardness = glm::dot(normal, glm::vec3(0.0f, 1.0f, 0.0f));
+            // 2. Process each segment with a specialized mapping technique
+            for (int segment = 0; segment < numSegments; segment++) {
+                if (segments[segment].empty()) continue;
+                
+                // Calculate segment-specific parameters
+                float segmentYMin = minBounds.y + (segment * dimensions.y) / numSegments;
+                float segmentYMax = minBounds.y + ((segment + 1) * dimensions.y) / numSegments;
+                float segmentHeight = segmentYMax - segmentYMin;
+                
+                // Calculate segment center
+                glm::vec3 segmentCenter = glm::vec3(0.0f);
+                for (size_t idx : segments[segment]) {
+                    segmentCenter += vertices[idx];
+                }
+                segmentCenter /= static_cast<float>(segments[segment].size());
+                
+                // Different mapping techniques based on segment position
+                if (segment < 3) {
+                    // Bottom segments (legs, tail) - use cylindrical mapping
+                    for (size_t idx : segments[segment]) {
+                        glm::vec3 dir = vertices[idx] - segmentCenter;
+                        float angle = atan2(dir.z, dir.x);
+                        float u = (angle + 3.14159f) / (2.0f * 3.14159f);
+                        
+                        // Normalize height within segment
+                        float v = (vertices[idx].y - segmentYMin) / segmentHeight;
+                        
+                        // Store UV with scaling for better texture detail
+                        uvs[idx] = glm::vec2(u * 2.0f, v * 2.0f);
+                    }
+                } 
+                else if (segment < 7) {
+                    // Middle segments (body, arms) - use a combination of cylindrical and spherical
+                    for (size_t idx : segments[segment]) {
+                        glm::vec3 dir = glm::normalize(vertices[idx] - segmentCenter);
+                        
+                        // Cylindrical component
+                        float angle = atan2(dir.z, dir.x);
+                        float u_cyl = (angle + 3.14159f) / (2.0f * 3.14159f);
+                        
+                        // Spherical component
+                        float u_sph = 0.5f + atan2(dir.z, dir.x) / (2.0f * 3.14159f);
+                        float v_sph = 0.5f - asin(dir.y) / 3.14159f;
+                        
+                        // Blend based on distance from central axis
+                        float distFromAxis = sqrt(dir.x * dir.x + dir.z * dir.z);
+                        float blend = glm::clamp(distFromAxis * 2.0f, 0.0f, 1.0f);
+                        
+                        float u = u_cyl;
+                        float v = (vertices[idx].y - segmentYMin) / segmentHeight;
+                        
+                        // Apply blending with spherical for extremities
+                        if (distFromAxis > 0.4f) {
+                            float extremityBlend = (distFromAxis - 0.4f) / 0.6f;
+                            u = glm::mix(u, u_sph, extremityBlend);
+                            v = glm::mix(v, v_sph, extremityBlend);
+                        }
+                        
+                        // Store UV with scaling
+                        uvs[idx] = glm::vec2(u * 3.0f, v * 3.0f);
+                    }
+                }
+                else {
+                    // Top segments (head, ears) - use spherical mapping
+                    for (size_t idx : segments[segment]) {
+                        glm::vec3 dir = glm::normalize(vertices[idx] - segmentCenter);
+                        float u = 0.5f + atan2(dir.z, dir.x) / (2.0f * 3.14159f);
+                        float v = 0.5f - asin(dir.y) / 3.14159f;
+                        
+                        // Store UV with scaling
+                        uvs[idx] = glm::vec2(u * 2.0f, v * 2.0f);
+                    }
+                }
+            }
             
-            if (abs(upwardness) > 0.7f) {
-                // For top/bottom parts, use planar mapping
-                uvs[i] = planarUV;
-            } else {
-                // For sides, use cylindrical mapping
-                uvs[i] = cylindricalUV;
+            // 3. Post-process UVs to ensure smooth transitions between segments
+            // Create a copy of the original UVs for blending
+            std::vector<glm::vec2> originalUVs = uvs;
+            
+            // Smooth transitions by averaging with neighboring vertices
+            for (size_t i = 0; i < vertices.size(); i++) {
+                // Find segment boundaries
+                float heightRatio = (vertices[i].y - minBounds.y) / dimensions.y;
+                int segmentIndex = std::min(static_cast<int>(heightRatio * numSegments), numSegments - 1);
+                
+                // If near segment boundary, blend with neighbors
+                float segmentPos = heightRatio * numSegments - segmentIndex;
+                if (segmentPos < 0.1f || segmentPos > 0.9f) {
+                    // Find closest vertices in adjacent segments
+                    float blendFactor = (segmentPos < 0.1f) ? (0.1f - segmentPos) / 0.1f : (segmentPos - 0.9f) / 0.1f;
+                    
+                    // Simple smoothing by averaging with original
+                    uvs[i] = glm::mix(originalUVs[i], uvs[i], 0.7f); // 70% new, 30% original
+                }
+            }
+            
+            // 4. Final adjustments to ensure proper texture wrapping
+            for (auto& uv : uvs) {
+                // Ensure UVs are in [0,1] range for proper texture mapping
+                uv = glm::fract(uv);
+            }
+            
+            std::cout << "Generated segmentation-based UVs for armadillo model." << std::endl;
+        } else {
+            // Original UV mapping for other models
+            for (size_t i = 0; i < vertices.size(); i++) {
+                // Get normalized position from vertex after centering
+                glm::vec3 pos = vertices[i] - minBounds;
+                pos /= dimensions; // Normalize to [0,1] range
+                
+                // Try several UV mapping approaches and choose the best one
+                // Approach 1: Planar mapping using XZ coordinates
+                glm::vec2 planarUV = glm::vec2(pos.x, pos.z);
+                
+                // Approach 2: Spherical mapping
+                glm::vec3 normal = glm::normalize(vertices[i] - center);
+                float u_spherical = 0.5f + atan2(normal.z, normal.x) / (2.0f * 3.14159f);
+                float v_spherical = 0.5f - asin(normal.y) / 3.14159f;
+                glm::vec2 sphericalUV = glm::vec2(u_spherical, v_spherical);
+                
+                // Approach 3: Cylindrical mapping
+                float theta = atan2(normal.z, normal.x);
+                float u_cylindrical = (theta + 3.14159f) / (2.0f * 3.14159f);
+                float v_cylindrical = (normal.y + 1.0f) * 0.5f;
+                glm::vec2 cylindricalUV = glm::vec2(u_cylindrical, v_cylindrical);
+                
+                // Choose mapping based on the shape:
+                // Use dot product with up vector to determine if we should use cylindrical vs spherical mapping
+                float upwardness = glm::dot(normal, glm::vec3(0.0f, 1.0f, 0.0f));
+                
+                if (abs(upwardness) > 0.7f) {
+                    // For top/bottom parts, use planar mapping
+                    uvs[i] = planarUV;
+                } else {
+                    // For sides, use cylindrical mapping
+                    uvs[i] = cylindricalUV;
+                }
             }
         }
         
         std::cout << "Generated " << uvs.size() << " procedural UV coordinates." << std::endl;
     } else {
         std::cout << "Model already has " << uvs.size() << " UV coordinates." << std::endl;
+    }
+    
+    // Force regeneration of UVs for the armadillo model
+    bool isArmadillo = filename.find("armadillo") != std::string::npos;
+    if (isArmadillo) {
+        std::cout << "Forcing regeneration of UVs for armadillo model..." << std::endl;
+        uvs.clear(); // Clear UVs to force regeneration
     }
     
     // Find the center of the model and translate vertices to center it

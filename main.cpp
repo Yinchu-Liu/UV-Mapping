@@ -15,16 +15,19 @@ int main() {
 
         std::cout << "Loading mesh..." << std::endl;
         Mesh mesh;
-        if (!mesh.loadFromFile("assets/models/cube.obj")) {
+        if (!mesh.loadFromFile("assets/models/armadillo.obj")) {
             std::cerr << "Failed to load mesh" << std::endl;
             return -1;
         }
 
         std::cout << "Loading texture..." << std::endl;
         Texture texture;
-        if (!texture.loadFromFile("assets/textures/texture.png")) {
-            std::cerr << "Failed to load texture" << std::endl;
-            return -1;
+        if (!texture.loadFromFile("assets/textures/checker.png")) {
+            std::cerr << "Failed to load checker texture, falling back to default" << std::endl;
+            if (!texture.loadFromFile("assets/textures/texture.png")) {
+                std::cerr << "Failed to load texture" << std::endl;
+                return -1;
+            }
         }
 
         std::cout << "Loading shaders..." << std::endl;
